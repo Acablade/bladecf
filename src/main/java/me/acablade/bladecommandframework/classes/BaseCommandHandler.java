@@ -8,6 +8,7 @@ import org.bukkit.command.*;
 import org.bukkit.entity.Player;
 
 import java.lang.annotation.Annotation;
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -54,6 +55,8 @@ public class BaseCommandHandler implements CommandExecutor, TabExecutor {
         CommandInfo commandInfo = commandClass.getClass().getAnnotation(CommandInfo.class);
 
         commandDataList.add(new CommandData(commandInfo.commandName(),commandClass));
+
+        //maybe do some shit w command map ??
         PluginCommand command = Bukkit.getServer().getPluginCommand(commandInfo.commandName());
         command.setExecutor(this);
         command.setTabCompleter(this);
