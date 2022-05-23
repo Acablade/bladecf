@@ -43,17 +43,24 @@ public class SubCommandData {
 
     }
 
-    public void execute(CommandSender commandSender,Object... args) throws RuntimeException{
-        Object senderParam = commandSender;
-        if(getMethod().getParameterTypes()[0] == Player.class && commandSender instanceof Player){
-            senderParam = (Player) commandSender;
+    public void execute(CommandActor actor,Object... args) throws RuntimeException{
+        Object senderParam = null;
+        if(getMethod().getParameterTypes()[0] == Player.class && actor.isPlayer()){
+            senderParam = actor.asPlayer();
+        }else if(getMethod().getParameterTypes()[0] == CommandSender.class){
+            senderParam = actor.getCommandSender();
+        }else if(getMethod().getParameterTypes()[0] == CommandActor.class){
+            senderParam = actor;
         }
-        if(!commandSender.hasPermission(getPermission())){
-            commandSender.sendMessage(ChatColor.translateAlternateColorCodes('&',"&cYou don't have enough permissions!"));
+
+        if(senderParam==null) return;
+
+        if(!actor.getCommandSender().hasPermission(getPermission())){
+            actor.reply("&cYou don't have enough permissions!");
             return;
         }
-        if(isPlayerOnly() && !(commandSender instanceof Player)){
-            commandSender.sendMessage(ChatColor.translateAlternateColorCodes('&',"&cOnly players can send this command!"));
+        if(isPlayerOnly() && !actor.isPlayer()){
+            actor.reply("&cOnly players can send this command!");
             return;
         }
 

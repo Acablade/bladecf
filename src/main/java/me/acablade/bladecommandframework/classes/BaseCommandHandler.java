@@ -185,7 +185,19 @@ public class BaseCommandHandler implements CommandExecutor, TabExecutor {
     public void executeCommand(CommandSender sender, CommandData commandData, String[] args) throws RuntimeException {
         Optional<SubCommandData> oscd = commandData.getSubCommand(args[0]);
         if(!oscd.isPresent()) return;
+        CommandActor actor = new CommandActor(sender);
+
+        if(commandData.isPlayerOnly()&&!actor.isPlayer()){
+            actor.reply("&cOnly players can send this command!");
+            return;
+        }
+
         SubCommandData scd = oscd.get();
+
+        if(scd.isPlayerOnly()&&!actor.isPlayer()){
+            actor.reply("&cOnly players can send this command!");
+            return;
+        }
 
         Stack<String> argStack = parseArgs(args);
         Stack<Class> classStack = new Stack<>();
@@ -194,14 +206,16 @@ public class BaseCommandHandler implements CommandExecutor, TabExecutor {
 
         List<Object> objects = new LinkedList<>();
 
+
+
         while(!classStack.isEmpty()){
             Class clazz = classStack.pop();
-            objects.add(resolveValue(clazz, argStack, new CommandActor(sender)));
+            objects.add(resolveValue(clazz, argStack, actor));
         }
 
         Collections.reverse(objects);
 
-        scd.execute(sender,objects.toArray(new Object[0]));
+        scd.execute(actor,objects.toArray(new Object[0]));
 
 
     }
