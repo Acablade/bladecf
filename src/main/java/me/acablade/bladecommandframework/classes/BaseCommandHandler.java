@@ -183,9 +183,15 @@ public class BaseCommandHandler implements CommandExecutor, TabExecutor {
     }
 
     public void executeCommand(CommandSender sender, CommandData commandData, String[] args) throws RuntimeException {
+        CommandActor actor = new CommandActor(sender);
+
+        if(args.length==0){
+            commandData.getFallbackCommand().execute(actor);
+            return;
+        }
         Optional<SubCommandData> oscd = commandData.getSubCommand(args[0]);
         if(!oscd.isPresent()) return;
-        CommandActor actor = new CommandActor(sender);
+
 
         if(commandData.isPlayerOnly()&&!actor.isPlayer()){
             actor.reply("&cOnly players can send this command!");

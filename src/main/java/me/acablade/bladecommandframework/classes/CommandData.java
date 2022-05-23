@@ -2,6 +2,7 @@ package me.acablade.bladecommandframework.classes;
 
 import lombok.Data;
 import me.acablade.bladecommandframework.annotations.CommandInfo;
+import me.acablade.bladecommandframework.annotations.FallbackCommand;
 
 import java.lang.reflect.Method;
 import java.util.ArrayList;
@@ -17,6 +18,7 @@ public class CommandData {
 	private final Object object;
 	private String permission;
 	private boolean playerOnly = false;
+	private SubCommandData fallbackCommand;
 	private List<SubCommandData> subCommandDataList;
 
 	public CommandData(String name, Object object){
@@ -47,6 +49,10 @@ public class CommandData {
 			SubCommandData subCommandData = new SubCommandData(commandInfo.commandName(), getObject(), method);
 
 			this.subCommandDataList.add(subCommandData);
+
+			if(method.isAnnotationPresent(FallbackCommand.class)){
+				this.fallbackCommand = subCommandData;
+			}
 		}
 	}
 
