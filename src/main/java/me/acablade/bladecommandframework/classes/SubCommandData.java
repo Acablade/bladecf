@@ -43,7 +43,7 @@ public class SubCommandData {
 
     }
 
-    public void execute(CommandSender commandSender,Object... args){
+    public void execute(CommandSender commandSender,Object... args) throws RuntimeException{
         Object senderParam = commandSender;
         if(getMethod().getParameterTypes()[0] == Player.class && commandSender instanceof Player){
             senderParam = (Player) commandSender;
@@ -61,7 +61,11 @@ public class SubCommandData {
 
         argsList.add(senderParam);
         for (int i = 0; i < args.length; i++) {
-            Object arg = args[i];
+            Optional param = (Optional) args[i];
+            if(!param.isPresent()){
+                throw new RuntimeException(String.format("Param (%s) returned null",i));
+            }
+            Object arg = param.get();
             Class expectedArg = getMethod().getParameterTypes()[getMethod().getParameterTypes().length-1-i];
             if(arg==null){
                 throw new IllegalArgumentException(String.format("Expected (%s) Found (%s)",expectedArg.getSimpleName(), null));

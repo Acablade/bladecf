@@ -9,6 +9,7 @@ import org.bukkit.entity.Player;
 
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -21,20 +22,30 @@ public class BaseCommandHandler implements CommandExecutor, TabExecutor {
     public BaseCommandHandler(){
         this.valueResolverMap = new HashMap<>();
         this.commandDataList = new ArrayList<>();
-        registerValueResolver(Player.class, args -> Bukkit.getPlayer((String)args.pop()));
-        registerValueResolver(World.class, args -> (World)Bukkit.getWorld((String)args.pop()));
-        registerValueResolver(int.class, args -> Integer.parseInt((String)args.pop()));
-        registerValueResolver(double.class, args -> Double.parseDouble((String)args.pop()));
-        registerValueResolver(float.class, args -> Float.parseFloat((String)args.pop()));
-        registerValueResolver(String.class, args -> {
-            String start = (String) args.pop();
+        registerValueResolver(Player.class, ctx -> {
+            String value = ctx.pop();
+            if(value.equalsIgnoreCase("self") || value.equalsIgnoreCase("me")){
+                return ctx.actor().requirePlayer();
+            }
+            Player player = Bukkit.getPlayerExact(value);
+            if(player==null)
+                throw new RuntimeException(String.format("Player not found (%s)", value));
+            return player;
+        });
+        registerValueResolver(World.class, args -> (World)Bukkit.getWorld(args.pop()));
+        registerValueResolver(int.class, ValueResolver.ValueResolverContext::popInt);
+        registerValueResolver(double.class, ValueResolver.ValueResolverContext::popDouble);
+        registerValueResolver(float.class, ValueResolver.ValueResolverContext::popFloat);
+        registerValueResolver(boolean.class, bool());
+        registerValueResolver(String.class, ctx -> {
+            String start = ctx.pop();
             LinkedList<String> linkedList = new LinkedList<>();
             if(start.equals("\"")) return start;
             if(start.endsWith("\"") && !start.startsWith("\"")){
                 String curr = "";
                 curr = start.substring(0,start.length()-1);
                 linkedList.add(curr);
-                while(!args.isEmpty()&&!(curr = (String)args.pop()).startsWith("\"")){
+                while(!ctx.arguments().isEmpty()&&!(curr = ctx.pop()).startsWith("\"")){
                     linkedList.add(curr);
                 }
                 curr = curr.substring(1);
@@ -48,6 +59,29 @@ public class BaseCommandHandler implements CommandExecutor, TabExecutor {
             return String.join(" ", linkedList);
         });
     }
+
+    private ValueResolver<Boolean> bool(){
+        return context -> {
+            String v = context.pop();
+            switch (v.toLowerCase()) {
+                case "true":
+                case "yes":
+                case "ye":
+                case "y":
+                case "yeah":
+                case "ofcourse":
+                case "mhm":
+                    return true;
+                case "false":
+                case "no":
+                case "n":
+                    return false;
+                default:
+                    throw new RuntimeException(String.format("Boolean not found with value (%s)",v));
+            }
+        };
+    }
+
     public void registerCommand(Object commandClass){
 
         if(!commandClass.getClass().isAnnotationPresent(CommandInfo.class)) return;
@@ -79,11 +113,76 @@ public class BaseCommandHandler implements CommandExecutor, TabExecutor {
         return stringStack;
     }
 
-    public <T> T resolveValue(Class<? extends T> clazz, Stack<String> args){
-        return (T) valueResolverMap.get(clazz).resolve(args);
+    private StackTraceSanitizer stackTraceSanitizer = StackTraceSanitizer.defaultSanitizer();
+
+    public <T> Optional<T> resolveValue(Class<? extends T> clazz, Stack<String> args, CommandActor actor){
+        try{
+            return (Optional<T>) Optional.ofNullable(valueResolverMap.get(clazz).resolve(new ValueResolverContext(args,actor)));
+        }catch (Throwable t){
+            stackTraceSanitizer.sanitize(t);
+            t.printStackTrace();
+            return Optional.empty();
+        }
     }
 
-    public void executeCommand(CommandSender sender, CommandData commandData, String[] args){
+
+    private static final class ValueResolverContext implements ValueResolver.ValueResolverContext {
+
+        private final Stack<String> args;
+        private final CommandActor actor;
+
+        public ValueResolverContext(Stack<String> args, CommandActor actor) {
+            this.args = args;
+            this.actor = actor;
+        }
+
+        @Override
+        public Stack<String> arguments() {
+            return args;
+        }
+
+        @Override
+        public String pop() {
+            return (String)args.pop();
+        }
+
+        @Override
+        public int popInt() {
+            return Integer.parseInt(pop());
+        }
+
+        @Override
+        public double popDouble() {
+            return Double.parseDouble(pop());
+        }
+
+        @Override
+        public byte popByte() {
+            return Byte.parseByte(pop());
+        }
+
+        @Override
+        public short popShort() {
+            return Short.parseShort(pop());
+        }
+
+        @Override
+        public float popFloat() {
+            return Float.parseFloat(pop());
+        }
+
+        @Override
+        public long popLong() {
+            return Long.parseLong(pop());
+        }
+
+        @Override
+        public CommandActor actor() {
+            return actor;
+        }
+    }
+
+    public void executeCommand(CommandSender sender, CommandData commandData, String[] args) throws RuntimeException {
         Optional<SubCommandData> oscd = commandData.getSubCommand(args[0]);
         if(!oscd.isPresent()) return;
         SubCommandData scd = oscd.get();
@@ -97,7 +196,7 @@ public class BaseCommandHandler implements CommandExecutor, TabExecutor {
 
         while(!classStack.isEmpty()){
             Class clazz = classStack.pop();
-            objects.add(resolveValue(clazz, argStack));
+            objects.add(resolveValue(clazz, argStack, new CommandActor(sender)));
         }
 
         Collections.reverse(objects);
@@ -120,7 +219,12 @@ public class BaseCommandHandler implements CommandExecutor, TabExecutor {
 
         CommandData cd = ocd.get();
 
-        executeCommand(sender,cd,args);
+        try {
+            executeCommand(sender,cd,args);
+        } catch (RuntimeException e) {
+            stackTraceSanitizer.sanitize(e);
+            e.printStackTrace();
+        }
 
 
         return false;

@@ -14,7 +14,6 @@ public final class BladeCommandFramework extends JavaPlugin {
 
         commandHandler.registerCommand(new TestCommand());
 
-
     }
 
     @Override
