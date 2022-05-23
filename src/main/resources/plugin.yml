@@ -1,7 +1,0 @@
-name: BladeCommandFramework
-version: '${project.version}'
-main: me.acablade.bladecommandframework.BladeCommandFramework
-authors: [ Acablade ]
-description: bukkit command framework
-commands:
-  test:
