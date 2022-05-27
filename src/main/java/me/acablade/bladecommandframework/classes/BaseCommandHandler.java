@@ -186,11 +186,14 @@ public class BaseCommandHandler implements CommandExecutor, TabExecutor {
         CommandActor actor = new CommandActor(sender);
 
         if(args.length==0){
-            commandData.getFallbackCommand().execute(actor);
+            if(commandData.getFallbackCommand()!=null)commandData.getFallbackCommand().execute(actor);
             return;
         }
         Optional<SubCommandData> oscd = commandData.getSubCommand(args[0]);
-        if(!oscd.isPresent()) return;
+        if(!oscd.isPresent()){
+            if(commandData.getFallbackCommand()!=null)commandData.getFallbackCommand().execute(actor);
+            return;
+        }
 
 
         if(commandData.isPlayerOnly()&&!actor.isPlayer()){
@@ -271,7 +274,7 @@ public class BaseCommandHandler implements CommandExecutor, TabExecutor {
             for (Annotation ann: annotations[args.length-1]){
                 if(!(ann instanceof Argument)) continue;
                 Argument argument = (Argument) ann;
-                tabComplete = argument.name();
+                tabComplete = argument.key();
                 break;
             }
             return Collections.singletonList(tabComplete);
