@@ -45,18 +45,19 @@ public class CommandData {
 	}
 	private void registerSubcommands(){
 		for(Method method: clazz.getDeclaredMethods()){
+			if(this.baseCommand==null&& method.isAnnotationPresent(BaseCommand.class)){
+				this.baseCommand = SubCommandData.builder()
+						.classStack(new Stack<>())
+						.method(method)
+						.parent(getObject())
+						.valid(true)
+						.name("null")
+						.permission("")
+						.playerOnly(((CommandInfo)clazz.getAnnotation(CommandInfo.class)).onlyPlayer())
+						.build();
+			}
 			if(!method.isAnnotationPresent(CommandInfo.class)){
-				if(this.baseCommand==null&& method.isAnnotationPresent(BaseCommand.class)){
-					this.baseCommand = SubCommandData.builder()
-							.classStack(new Stack<>())
-							.method(method)
-							.parent(getObject())
-							.valid(true)
-							.name("null")
-							.permission("")
-							.playerOnly(((CommandInfo)clazz.getAnnotation(CommandInfo.class)).onlyPlayer())
-							.build();
-				}
+
 				continue;
 			}
 
