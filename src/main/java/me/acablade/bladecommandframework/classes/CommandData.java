@@ -1,6 +1,7 @@
 package me.acablade.bladecommandframework.classes;
 
 import lombok.Data;
+import me.acablade.bladecommandframework.annotations.BaseCommand;
 import me.acablade.bladecommandframework.annotations.CommandInfo;
 import me.acablade.bladecommandframework.annotations.FallbackCommand;
 
@@ -8,6 +9,7 @@ import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.Stack;
 
 @Data
 public class CommandData {
@@ -19,6 +21,7 @@ public class CommandData {
 	private String permission;
 	private boolean playerOnly = false;
 	private SubCommandData fallbackCommand;
+	private SubCommandData baseCommand;
 	private List<SubCommandData> subCommandDataList;
 
 	public CommandData(String name, Object object){
@@ -42,7 +45,20 @@ public class CommandData {
 	}
 	private void registerSubcommands(){
 		for(Method method: clazz.getDeclaredMethods()){
-			if(!method.isAnnotationPresent(CommandInfo.class)) continue;
+			if(!method.isAnnotationPresent(CommandInfo.class)){
+				if(this.baseCommand==null&& method.isAnnotationPresent(BaseCommand.class)){
+					this.baseCommand = SubCommandData.builder()
+							.classStack(new Stack<>())
+							.method(method)
+							.parent(getObject())
+							.valid(true)
+							.name("null")
+							.permission("")
+							.playerOnly(((CommandInfo)clazz.getAnnotation(CommandInfo.class)).onlyPlayer())
+							.build();
+				}
+				continue;
+			}
 
 			CommandInfo commandInfo = method.getAnnotation(CommandInfo.class);
 
@@ -50,9 +66,13 @@ public class CommandData {
 
 			this.subCommandDataList.add(subCommandData);
 
-			if(method.isAnnotationPresent(FallbackCommand.class)){
+			if(this.fallbackCommand!=null && method.isAnnotationPresent(FallbackCommand.class)){
 				this.fallbackCommand = subCommandData;
 			}
+
+
+
+
 		}
 	}
 

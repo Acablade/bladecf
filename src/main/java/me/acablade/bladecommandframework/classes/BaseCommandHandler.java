@@ -3,13 +3,13 @@ package me.acablade.bladecommandframework.classes;
 import me.acablade.bladecommandframework.annotations.Argument;
 import me.acablade.bladecommandframework.annotations.CommandInfo;
 import org.bukkit.Bukkit;
+import org.bukkit.GameMode;
+import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.command.*;
 import org.bukkit.entity.Player;
 
 import java.lang.annotation.Annotation;
-import java.lang.reflect.Field;
-import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -17,10 +17,12 @@ import java.util.stream.Collectors;
 public class BaseCommandHandler implements CommandExecutor, TabExecutor {
 
     private Map<Class, ValueResolver> valueResolverMap;
+    private Map<Class, TabCompleter> tabCompleterMap;
     private List<CommandData> commandDataList;
 
     public BaseCommandHandler(){
         this.valueResolverMap = new HashMap<>();
+        this.tabCompleterMap = new HashMap<>();
         this.commandDataList = new ArrayList<>();
         registerValueResolver(Player.class, ctx -> {
             String value = ctx.pop();
@@ -58,6 +60,13 @@ public class BaseCommandHandler implements CommandExecutor, TabExecutor {
             Collections.reverse(linkedList);
             return String.join(" ", linkedList);
         });
+        registerValueResolver(Material.class, ctx -> Material.matchMaterial(ctx.pop().toUpperCase(Locale.ENGLISH)));
+        registerValueResolver(GameMode.class, ctx -> GameMode.valueOf(ctx.pop().toUpperCase(Locale.ENGLISH)));
+
+        registerTabCompleter(Material.class, () -> Arrays.stream(Material.values()).map(Material::name).collect(Collectors.toList()));
+        registerTabCompleter(GameMode.class, () -> Arrays.stream(GameMode.values()).map(GameMode::name).collect(Collectors.toList()));
+        registerTabCompleter(Player.class, () -> Bukkit.getOnlinePlayers().stream().map(Player::getName).collect(Collectors.toList()));
+
     }
 
     private ValueResolver<Boolean> bool(){
@@ -75,6 +84,7 @@ public class BaseCommandHandler implements CommandExecutor, TabExecutor {
                 case "false":
                 case "no":
                 case "n":
+                case "nay":
                     return false;
                 default:
                     throw new RuntimeException(String.format("Boolean not found with value (%s)",v));
@@ -101,14 +111,18 @@ public class BaseCommandHandler implements CommandExecutor, TabExecutor {
         valueResolverMap.put(clazz,valueResolver);
     }
 
-    public Stack<String> parseArgs(String command){
-        return parseArgs(command.split(" "));
+    public void registerTabCompleter(Class clazz, TabCompleter tabCompleter){
+        this.tabCompleterMap.put(clazz,tabCompleter);
     }
 
-    public Stack<String> parseArgs(String[] args){
+    public Stack<String> parseArgs(String command, boolean removeFirst){
+        return parseArgs(command.split(" "),removeFirst);
+    }
+
+    public Stack<String> parseArgs(String[] args, boolean removeFirst){
         Stack<String> stringStack = new Stack<>();
         LinkedList<String> tmp = new LinkedList<>(Arrays.asList(args));
-        tmp.remove(0);
+        if(removeFirst)tmp.remove(0);
         stringStack.addAll(tmp);
         return stringStack;
     }
@@ -119,7 +133,7 @@ public class BaseCommandHandler implements CommandExecutor, TabExecutor {
         try{
             return (Optional<T>) Optional.ofNullable(valueResolverMap.get(clazz).resolve(new ValueResolverContext(args,actor)));
         }catch (Throwable t){
-            stackTraceSanitizer.sanitize(t);
+//            stackTraceSanitizer.sanitize(t);
             t.printStackTrace();
             return Optional.empty();
         }
@@ -186,12 +200,14 @@ public class BaseCommandHandler implements CommandExecutor, TabExecutor {
         CommandActor actor = new CommandActor(sender);
 
         if(args.length==0){
-            if(commandData.getFallbackCommand()!=null)commandData.getFallbackCommand().execute(actor);
+            if(commandData.getBaseCommand()!=null) commandData.getBaseCommand().execute(actor);
+            else if(commandData.getFallbackCommand()!=null) commandData.getFallbackCommand().execute(actor);
             return;
         }
         Optional<SubCommandData> oscd = commandData.getSubCommand(args[0]);
         if(!oscd.isPresent()){
-            if(commandData.getFallbackCommand()!=null)commandData.getFallbackCommand().execute(actor);
+            if(commandData.getBaseCommand()!=null) executeWithParams(actor,commandData.getBaseCommand(),args, false);
+            else if(commandData.getFallbackCommand()!=null) commandData.getFallbackCommand().execute(actor);
             return;
         }
 
@@ -208,7 +224,12 @@ public class BaseCommandHandler implements CommandExecutor, TabExecutor {
             return;
         }
 
-        Stack<String> argStack = parseArgs(args);
+        executeWithParams(actor,scd,args, true);
+
+    }
+
+    private void executeWithParams(CommandActor actor,SubCommandData scd, String[] args, boolean removeFirst){
+        Stack<String> argStack = parseArgs(args, removeFirst);
         Stack<Class> classStack = new Stack<>();
 
         classStack.addAll(scd.getClassStack());
@@ -225,8 +246,6 @@ public class BaseCommandHandler implements CommandExecutor, TabExecutor {
         Collections.reverse(objects);
 
         scd.execute(actor,objects.toArray(new Object[0]));
-
-
     }
 
     private Optional<CommandData> findCommandData(String name){
@@ -245,7 +264,7 @@ public class BaseCommandHandler implements CommandExecutor, TabExecutor {
         try {
             executeCommand(sender,cd,args);
         } catch (RuntimeException e) {
-            stackTraceSanitizer.sanitize(e);
+//            stackTraceSanitizer.sanitize(e);
             e.printStackTrace();
         }
 
@@ -254,7 +273,7 @@ public class BaseCommandHandler implements CommandExecutor, TabExecutor {
     }
 
     @Override
-    public List<String> onTabComplete(CommandSender sender, Command command, String label, String[] args) {
+    public List onTabComplete(CommandSender sender, Command command, String label, String[] args) {
 
         Optional<CommandData> ocd = findCommandData(command.getName());
 
@@ -262,14 +281,38 @@ public class BaseCommandHandler implements CommandExecutor, TabExecutor {
 
         CommandData cd = ocd.get();
 
-        if(args.length==1) return cd.getSubCommandDataList().stream().map(SubCommandData::getName).collect(Collectors.toList());
-        else if(args.length>1&&cd.getSubCommand(args[0]).isPresent()) {
+        if(args.length==1){
+            List<String> subCommandList = cd.getSubCommandDataList().stream().map(SubCommandData::getName).collect(Collectors.toList());
+            if(cd.getBaseCommand()!=null){
+                SubCommandData subCommandData = cd.getBaseCommand();
+                Method method = subCommandData.getMethod();
+                Class parameterClass = subCommandData.getClassStack().get(0);
+                if(tabCompleterMap.containsKey(parameterClass)){
+                    subCommandList.addAll(tabCompleterMap.get(parameterClass).complete());
+                }
+                String tabComplete = parameterClass.getSimpleName();
+                Annotation[][] annotations = method.getParameterAnnotations();
+                for (Annotation ann: annotations[args.length-1]){
+                    if(!(ann instanceof Argument)) continue;
+                    Argument argument = (Argument) ann;
+                    tabComplete = argument.key();
+                    break;
+                }
+                subCommandList.add(tabComplete);
+            }
+            return subCommandList;
+        }
+        else if(args.length>1){
             Optional<SubCommandData> oscd = cd.getSubCommand(args[0]);
-            if(!oscd.isPresent()) return Collections.emptyList();
-            SubCommandData subCommandData = oscd.get();
+            SubCommandData subCommandData = oscd.orElseGet(cd::getBaseCommand);
             Method method = subCommandData.getMethod();
             if(subCommandData.getClassStack().size()<args.length-1) return Collections.emptyList();
-            String tabComplete = subCommandData.getClassStack().get(args.length-2).getSimpleName();
+            int minus = subCommandData==cd.getBaseCommand() ? 1 : 2;
+            Class parameterClass = subCommandData.getClassStack().get(args.length-minus);
+            if(tabCompleterMap.containsKey(parameterClass)){
+                return tabCompleterMap.get(parameterClass).complete();
+            }
+            String tabComplete = parameterClass.getSimpleName();
             Annotation[][] annotations = method.getParameterAnnotations();
             for (Annotation ann: annotations[args.length-1]){
                 if(!(ann instanceof Argument)) continue;

@@ -11,6 +11,7 @@ import java.lang.reflect.Method;
 import java.util.*;
 
 @Data
+@Builder
 public class SubCommandData {
 
     private final String name;
@@ -19,7 +20,7 @@ public class SubCommandData {
     private final boolean valid;
     private String permission;
     private boolean playerOnly = false;
-    private Stack<Class> classStack = null;
+    private Stack<Class> classStack = new Stack<>();
 
     public SubCommandData(String name, Object parent,Method method){
 
@@ -35,12 +36,23 @@ public class SubCommandData {
         this.permission = annotation.permission();
         this.playerOnly = annotation.onlyPlayer();
 
-        this.classStack = new Stack<>();
-
         for (int i = 1; i < method.getParameterCount(); i++) {
             classStack.add(method.getParameterTypes()[i]);
         }
 
+    }
+
+    public SubCommandData(String name, Method method,Object parent,boolean valid, String permission,  boolean playerOnly, Stack<Class> classStack){
+        this.name = name;
+        this.parent  = parent;
+        this.method = method;
+        this.valid = valid;
+        this.permission = permission;
+        this.playerOnly = playerOnly;
+        this.classStack = classStack;
+        for (int i = 1; i < method.getParameterCount(); i++) {
+            classStack.add(method.getParameterTypes()[i]);
+        }
     }
 
     public void execute(CommandActor actor,Object... args) throws RuntimeException{
