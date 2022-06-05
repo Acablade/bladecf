@@ -79,20 +79,25 @@ public class SubCommandData {
         List<Object> argsList = new LinkedList<>();
 
         argsList.add(senderParam);
-        for (int i = 0; i < args.length; i++) {
-            Optional param = (Optional) args[i];
-            if(!param.isPresent()){
-                throw new RuntimeException(String.format("Param (%s) returned null",i));
+        if(args.length==0){
+            argsList.add(null);
+        }else{
+            for (int i = 0; i < args.length; i++) {
+                Optional param = (Optional) args[i];
+                if(!param.isPresent()){
+                    throw new RuntimeException(String.format("Param (%s) returned null",i));
+                }
+                Object arg = param.get();
+                Class expectedArg = getMethod().getParameterTypes()[getMethod().getParameterTypes().length-1-i];
+                if(arg==null){
+                    throw new IllegalArgumentException(String.format("Expected (%s) Found (%s)",expectedArg.getSimpleName(), null));
+                }else if(arg.getClass().isInstance(expectedArg)){
+                    throw new IllegalArgumentException(String.format("Expected (%s) Found (%s)",expectedArg.getSimpleName(), arg.getClass().getSimpleName()));
+                }
+                argsList.add(arg);
             }
-            Object arg = param.get();
-            Class expectedArg = getMethod().getParameterTypes()[getMethod().getParameterTypes().length-1-i];
-            if(arg==null){
-                throw new IllegalArgumentException(String.format("Expected (%s) Found (%s)",expectedArg.getSimpleName(), null));
-            }else if(arg.getClass().isInstance(expectedArg)){
-                throw new IllegalArgumentException(String.format("Expected (%s) Found (%s)",expectedArg.getSimpleName(), arg.getClass().getSimpleName()));
-            }
-            argsList.add(arg);
         }
+
 
         try {
             getMethod().invoke(getParent(),argsList.toArray(new Object[0]));
